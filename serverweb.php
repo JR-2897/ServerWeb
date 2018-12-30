@@ -1,59 +1,146 @@
 <?php
 error_reporting(E_ALL);
 
-/* Autorise l'exécution infinie du script, en attente de connexion. */
+// Exécution infinie du script
 set_time_limit(0);
 
-/* Active le vidage implicite des buffers de sortie, pour que nous
- * puissions voir ce que nous lisons au fur et à mesure. */
+//Permet d'afficher au fur et à mesure par vidage des buffers de sorties
 ob_implicit_flush();
 
-$address = '192.168.0.20';
-$port = 80;
+//Entrée adresse ip server voulue
+$address_ip = '192.168.0.21';
 
-if (($sock = socket_create(AF_INET, SOCK_STREAM, SOL_TCP)) === false) {
-    echo "socket_create() a échoué : raison : " . socket_strerror(socket_last_error()) . "\n";
+//Port utilisé
+$port_use = 80;
+
+//Création du socket avec gestion des erreurs
+$socket = socket_create(AF_INET, SOCK_STREAM, SOL_TCP);
+
+if ($socket === false) {
+    
+    echo "Raison de l'échec : " . socket_strerror(socket_last_error());
 }
 
-if (socket_bind($sock, $address, $port) === false) {
-    echo "socket_bind() a échoué : raison : " . socket_strerror(socket_last_error($sock)) . "\n";
+//Affectation nom socket avec gestion des erreurs
+$bind = socket_bind($socket, $address_ip, $port_use);
+
+if ($bind === false) {
+    
+    echo "Raison de l'échec : " . socket_strerror(socket_last_error($socket));
 }
 
-if (socket_listen($sock, 5) === false) {
-    echo "socket_listen() a échoué : raison : " . socket_strerror(socket_last_error($sock)) . "\n";
+//Socket en attente de connection
+$listen = socket_listen($socket, 10);
+
+if ($listen === false) {
+    
+    echo "Raison de l'échec : " . socket_strerror(socket_last_error($socket));
 }
 
 do {
-    if (($msgsock = socket_accept($sock)) === false) {
-        echo "socket_accept() a échoué : raison : " . socket_strerror(socket_last_error($sock)) . "\n";
+
+    //Accepte socket
+    $sockHTTP = socket_accept($socket);
+
+    if ($sockHTTP === false) {
+        
+        echo "Raisons de l'échec : " . socket_strerror(socket_last_error($socket));
+        
         break;
     }
-    /* Send instructions. */
-    $msg = "\Bienvenue sur le serveur de test PHP.\n" .
-        "Pour quitter, tapez 'quit'. Pour éteindre le serveur, tapez 'shutdown'.\n";
-    socket_write($msgsock, $msg, strlen($msg));
+
+    //Message d'acceuil sur le server web
+    $accueil = "Server web de JR-2897. Pour quitter, tapez 'quitter'. Afin d'éteindre le serveur, tapez 'switch off'.\n";
+
+    socket_write($sockHTTP, $accueil, strlen($accueil));
 
     do {
-        if (false === ($buf = socket_read($msgsock, 2048, PHP_NORMAL_READ))) {
-            echo "socket_read() a échoué : raison : " . socket_strerror(socket_last_error($msgsock)) . "\n";
+
+        //Stockage requette HTTP avec gestion des erreurs
+        $buffer = socket_read($sockHTTP, 2048, PHP_NORMAL_READ);
+
+        if ($buffer === false ) {
+            
+            echo "Raisons de l'échec : " . socket_strerror(socket_last_error($sockHTTP));
+
+            //Permet de quitter les deux boucles do while
             break 2;
         }
-        if (!$buf = trim($buf)) {
-            continue;
+
+        if ($buffer == 'GET index.html HTTP/1.1') {
+            
+            $date = date('D d M Y h-i-s /GMT');
+
+            $http_answer = "HTTP/1.1 200 OK\n";
+            $http_answer = "Date: '$date'\n";
+            $http_answer .= "Connection: keep-alive\n";
+            $http_answer .= "Content-Type: text/html; charset=UTF-8\n";
+            $http_answer .= "Accept-Language: en-us,fr\n";
+            
+            
+            socket_write($sockHTTP, $http_answer, strlen($http_answer));
+
         }
-        if ($buf == 'quit') {
+
+        if ($buffer == 'GET index.html/admin HTTP/1.1') {
+            $http_answer = "HTTP/1.1 403\n";
+            socket_write($sockHTTP, $http_answer, strlen($http_answer));
+        }
+
+        if ($buffer == 'GET inde.html HTTP/1.1') {
+            
+            $http_answer = "HTTP/1.1 404\n";
+            socket_write($sockHTTP, $http_answer, strlen($http_answer));
+
+        }
+
+        if ($buffer == 'HEAD index.html HTTP/1.1') {
+            
+            $date = date('D d M Y h-i-s /GMT');
+
+            $http_answer = "HTTP/1.1 200 OK\n";
+            $http_answer = "Date: '$date'\n";
+            $http_answer .= "Connection: keep-alive\n";
+            $http_answer .= "Content-Type: text/html; charset=UTF-8\n";
+            $http_answer .= "Accept-Language: en-us,fr\n";            
+            
+            socket_write($sockHTTP, $http_answer, strlen($http_answer));
+
+        }
+
+        if ($buffer == 'HEAD index.html/admin HTTP/1.1') {
+            $http_answer = "HTTP/1.1 403\n";
+            socket_write($sockHTTP, $http_answer, strlen($http_answer));
+        }
+
+        if ($buffer == 'HEAD inde.html HTTP/1.1') {
+            
+            $http_answer = "HTTP/1.1 404\n";
+            socket_write($sockHTTP, $http_answer, strlen($http_answer));
+
+        }
+
+        if ($buffer == 'quitter') {
+            
             break;
         }
-        if ($buf == 'shutdown') {
-            socket_close($msgsock);
+
+        if ($buffer == 'switch off') {
+            
+            socket_close($sockHTTP);
+
+            //Permet de quitter les deux boucles do while
             break 2;
         }
-        $talkback = "PHP: You said '$buf'.\n";
-        socket_write($msgsock, $talkback, strlen($talkback));
-        echo "$buf\n";
-    } while (true);
-    socket_close($msgsock);
-} while (true);
+
+        socket_write($sockHTTP, $buffer, strlen($buffer));
+    } 
+    while (true);
+
+    socket_close($sockHTTP);
+
+} 
+while (true);
 
 socket_close($sock);
 ?>
